@@ -2,6 +2,7 @@ package limiter
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -12,7 +13,7 @@ import (
 // RequestLimiter represents request limiter store
 type RequestLimiter struct {
 	mu            *sync.RWMutex
-	isTimedOut    map[string]bool
+	isTimedOut    map[string]*time.Time
 	limiterStore  limiter.Store
 	subnetTimeout time.Duration
 }
@@ -29,7 +30,7 @@ func NewRequestLimiter(tokens uint64, interval, requestCooldown time.Duration) (
 
 	return RequestLimiter{
 		&sync.RWMutex{},
-		make(map[string]bool),
+		make(map[string]*time.Time),
 		limiterStore,
 		requestCooldown,
 	}, nil
@@ -38,7 +39,8 @@ func NewRequestLimiter(tokens uint64, interval, requestCooldown time.Duration) (
 // CooldownSubnet prohibits all requests for given subnet
 func (l *RequestLimiter) CooldownSubnet(ip string) {
 	l.mu.Lock()
-	l.isTimedOut[ip] = true
+	t := time.Now().UTC().Add(l.subnetTimeout)
+	l.isTimedOut[ip] = &t
 	l.mu.Unlock()
 	go l.allowAfterTimeout(ip)
 }
@@ -47,7 +49,7 @@ func (l *RequestLimiter) CooldownSubnet(ip string) {
 func (l *RequestLimiter) allowAfterTimeout(ip string) {
 	time.Sleep(l.subnetTimeout)
 	l.mu.Lock()
-	l.isTimedOut[ip] = false
+	l.isTimedOut[ip] = nil
 	l.mu.Unlock()
 }
 
@@ -56,7 +58,7 @@ func (l *RequestLimiter) IsTimedOut(ip string) bool {
 	l.mu.RLock()
 	c, ok := l.isTimedOut[ip]
 	l.mu.RUnlock()
-	return ok && c
+	return ok && c != nil
 }
 
 // Take takes token from limiter store for the given subnet
@@ -68,6 +70,16 @@ func (l *RequestLimiter) Take(ctx context.Context, ip string) (remaining uint64,
 // Close closes limite store
 func (l *RequestLimiter) Close(ctx context.Context) error {
 	return l.limiterStore.Close(ctx)
+}
+
+// Get returns the end time of the cooldown
+func (l *RequestLimiter) Get(ip string) (time.Time, error) {
+	t := l.isTimedOut[ip]
+	if t == nil {
+		return time.Time{}, fmt.Errorf("subnet %s does not exist", ip)
+	}
+
+	return *t, nil
 }
 
 // func (l *RequestLimiter) Reset(ip string) {

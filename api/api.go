@@ -60,6 +60,13 @@ func (a *API) rateLimiterMiddleware(next http.Handler) http.Handler {
 		// masking IP to get subnet and checking if it already timed out
 		maskedIP := ipAddr.Mask(a.ipMask).String()
 		if a.rateLimiter.IsTimedOut(maskedIP) {
+			t, err := a.rateLimiter.Get(maskedIP)
+			if err != nil {
+				http.Error(rw, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+				return
+			}
+			rw.Header().Add("Retry-After", t.Format(http.TimeFormat))
+
 			http.Error(rw, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
 			a.logger.Debug("too many requests", zap.String("ip", ipAddr.String()), zap.String("subnet", maskedIP))
 			return
