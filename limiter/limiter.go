@@ -16,6 +16,8 @@ type RequestLimiter struct {
 	isTimedOut    map[string]*time.Time
 	limiterStore  limiter.Store
 	subnetTimeout time.Duration
+	tokens        uint64
+	inteval       time.Duration
 }
 
 // NewRequestLimiter creates request limiter store
@@ -33,6 +35,8 @@ func NewRequestLimiter(tokens uint64, interval, requestCooldown time.Duration) (
 		make(map[string]*time.Time),
 		limiterStore,
 		requestCooldown,
+		tokens,
+		interval,
 	}, nil
 }
 
@@ -82,7 +86,24 @@ func (l *RequestLimiter) Get(ip string) (time.Time, error) {
 	return *t, nil
 }
 
-// func (l *RequestLimiter) Reset(ip string) {
-// 	// l.limiterStore.Set(ctx context.Context, key string, tokens uint64, interval time.Duration)
-// 	l.limiterStore.Get(ctx, ip)
-// }
+// Reset resets limit for subnet
+func (l *RequestLimiter) Reset(ctx context.Context, ip string) error {
+	t, r, err := l.limiterStore.Get(ctx, ip)
+	if err != nil {
+		return err
+	}
+	if t == 0 && r == 0 {
+		return fmt.Errorf("subnet %s does not exists", ip)
+	}
+
+	err = l.limiterStore.Set(ctx, ip, l.tokens, l.inteval)
+	if err != nil {
+		return err
+	}
+
+	l.mu.Lock()
+	l.isTimedOut[ip] = nil
+	l.mu.Unlock()
+
+	return nil
+}

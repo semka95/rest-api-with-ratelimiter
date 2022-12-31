@@ -26,6 +26,7 @@ func (a *API) NewRouter(ipMask net.IPMask, rateLimiter limiter.RequestLimiter, l
 
 	mux := http.NewServeMux()
 	mux.Handle("/", a.rateLimiterMiddleware(http.HandlerFunc(a.homePage)))
+	mux.Handle("/reset", http.HandlerFunc(a.resetLimit))
 
 	return mux
 }
@@ -94,3 +95,23 @@ func (a *API) rateLimiterMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(rw, req)
 	})
 }
+
+func (a *API) resetLimit(w http.ResponseWriter, r *http.Request) {
+	subnet := r.URL.Query().Get("ip")
+	a.logger.Debug("reset ip", zap.String("ip", subnet))
+	if subnet == "" {
+		http.Error(w, fmt.Sprintf("wrong ip: %s", subnet), http.StatusBadRequest)
+		a.logger.Warn("bad ip address", zap.String("ip", subnet))
+		return
+	}
+
+	err := a.rateLimiter.Reset(r.Context(), subnet)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("wrong ip: %s", subnet), http.StatusBadRequest)
+		a.logger.Warn("no such subnet", zap.String("ip", subnet))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
