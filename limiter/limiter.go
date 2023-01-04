@@ -17,7 +17,7 @@ type RequestLimiter struct {
 	limiterStore  limiter.Store
 	subnetTimeout time.Duration
 	tokens        uint64
-	inteval       time.Duration
+	interval      time.Duration
 }
 
 // NewRequestLimiter creates request limiter store
@@ -96,7 +96,7 @@ func (l *RequestLimiter) Reset(ctx context.Context, ip string) error {
 		return fmt.Errorf("subnet %s does not exists", ip)
 	}
 
-	err = l.limiterStore.Set(ctx, ip, l.tokens, l.inteval)
+	err = l.limiterStore.Set(ctx, ip, l.tokens, l.interval)
 	if err != nil {
 		return err
 	}
