@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"rate-limiter/limiter"
+	"rate-limiter/templates"
 
 	"go.uber.org/zap"
 )
@@ -61,14 +62,15 @@ func (a *API) rateLimiterMiddleware(next http.Handler) http.Handler {
 		// masking IP to get subnet and checking if it already timed out
 		maskedIP := ipAddr.Mask(a.ipMask).String()
 		if a.rateLimiter.IsTimedOut(maskedIP) {
-			t, err := a.rateLimiter.Get(maskedIP)
+			t, reqLimit, interval, err := a.rateLimiter.Get(maskedIP)
 			if err != nil {
 				http.Error(rw, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 				return
 			}
 			rw.Header().Add("Retry-After", t.Format(http.TimeFormat))
 
-			http.Error(rw, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
+			rw.WriteHeader(http.StatusTooManyRequests)
+			templates.TooManyReqTmpl.Execute(rw, templates.TooManyReqData{Requests: reqLimit, Duration: interval, Date: t.Format(http.TimeFormat)})
 			a.logger.Debug("too many requests", zap.String("ip", ipAddr.String()), zap.String("subnet", maskedIP))
 			return
 		}

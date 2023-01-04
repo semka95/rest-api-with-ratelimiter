@@ -77,13 +77,13 @@ func (l *RequestLimiter) Close(ctx context.Context) error {
 }
 
 // Get returns the end time of the cooldown
-func (l *RequestLimiter) Get(ip string) (time.Time, error) {
+func (l *RequestLimiter) Get(ip string) (time.Time, uint64, time.Duration, error) {
 	t := l.isTimedOut[ip]
 	if t == nil {
-		return time.Time{}, fmt.Errorf("subnet %s does not exist", ip)
+		return time.Time{}, 0, 0, fmt.Errorf("subnet %s does not exist", ip)
 	}
 
-	return *t, nil
+	return *t, l.tokens, l.interval, nil
 }
 
 // Reset resets limit for subnet
